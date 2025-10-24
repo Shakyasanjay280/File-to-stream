@@ -60,29 +60,17 @@ async def initialize_clients(main_bot_instance):
     multi_clients[0] = main_bot_instance
     work_loads[0] = 0
     
-    # --- YEH FINAL FIX HAI ---
-    # Bot ko start hone ke baad thoda time do sync hone ke liye
-    print("Waiting 5 seconds for bot to initialize...")
-    await asyncio.sleep(5) 
-    
-    try:
-        print(f"Fetching info for STORAGE_CHANNEL ({Config.STORAGE_CHANNEL})...")
-        # Ab get_chat call karo, is baar yeh kaam karega
-        await main_bot_instance.get_chat(Config.STORAGE_CHANNEL)
-        print("Channel info cached successfully.")
-    except Exception as e:
-        print(f"!!! FATAL ERROR: Could not get channel info. Make sure bot is an admin in STORAGE_CHANNEL. Error: {e}")
-        return # Agar yeh fail ho toh aage mat badho
-    # --- FIX KHATAM ---
+    # Purana fix yahan se hata diya gaya hai kyunki webserver.py mein isse behtar fix laga hai.
 
     all_tokens = TokenParser.parse_from_env()
     if not all_tokens:
-        print("No additional clients found. Using default bot only."); return
+        print("No additional clients found. Using default bot only.")
+        return
     
     print(f"Found {len(all_tokens)} extra clients. Starting them with a delay.")
     for i, token in all_tokens.items():
         await start_client(i, token)
-        await asyncio.sleep(5)
+        await asyncio.sleep(2) # Thoda delay zaroori hai floodwait se bachne ke liye
 
     if len(multi_clients) > 1:
         print(f"Multi-Client Mode Enabled. Total Clients: {len(multi_clients)}")
@@ -175,5 +163,23 @@ async def url_upload_handler(client, message: Message):
     finally:
         if os.path.exists(file_path): os.remove(file_path)
 
-    await handle_file_upload(sent_message, message.from_user.id)
+    # Note: `handle_file_upload` expects a message object from a user, but `send_document` returns
+    # the bot's own message. For link generation, it works, but for user-specific logic it might need adjustment.
+    # Here, we'll manually call the link generation part.
+    
+    # Creating a temporary message-like object to pass to handle_file_upload
+    class TempMessage:
+        def __init__(self, sent_msg, original_msg):
+            self.id = sent_msg.id
+            self.chat = sent_msg.chat
+            self.from_user = original_msg.from_user
+        
+        async def copy(self, chat_id):
+            return await client.copy_message(chat_id, self.chat.id, self.id)
+
+        async def reply_text(self, *args, **kwargs):
+            return await original_msg.reply_text(*args, **kwargs)
+
+    temp_msg_for_handler = TempMessage(sent_message, message)
+    await handle_file_upload(temp_msg_for_handler, message.from_user.id)
     await status_msg.delete()
