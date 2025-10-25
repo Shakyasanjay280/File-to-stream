@@ -1,12 +1,16 @@
-# app.py (FINAL, CLEAN, AND EASY-TO-UNDERSTAND CODE)
+# app.py (THE REAL, FINAL, CLEAN, EASY-TO-READ CODE)
 
 import os
 import asyncio
 import secrets
 import traceback
 import uvicorn
+import logging
+import re
+from urllib.parse import urlparse
 from contextlib import asynccontextmanager
 
+# aiohttp aur aiofiles ki ab zaroorat nahi hai
 from pyrogram import Client, filters, enums
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, ChatMemberUpdated
 from pyrogram.errors import FloodWait
@@ -26,47 +30,42 @@ from database import db
 # --- SETUP: BOT AUR WEB SERVER KO TAIYAAR KARNA ---
 # =====================================================================================
 
-# FastAPI ka 'lifespan' manager. Yeh bot ko web server ke saath start aur stop karta hai.
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    print("--- SERVER STARTUP: Lifespan event shuru ho raha hai ---")
+    """
+    Yeh function bot ko web server ke saath start aur stop karta hai.
+    """
+    print("--- Lifespan event: STARTUP ---")
     
-    # Database se connect karo
     await db.connect()
     
     try:
-        # Pyrogram bot ko background mein start karo
-        print("Pyrogram bot ko start kar raha hai...")
+        print("Starting Pyrogram client in background...")
         await bot.start()
-        print(f"✅ Bot [@{bot.me.username}] safaltapoorvak start ho gaya.")
+        print(f"Bot [@{bot.me.username}] started successfully.")
         
-        # Storage channel ko check karo
-        print(f"Storage channel ({Config.STORAGE_CHANNEL}) ko check kar raha hai...")
+        print(f"Verifying channel access for {Config.STORAGE_CHANNEL}...")
         await bot.get_chat(Config.STORAGE_CHANNEL)
-        print("✅ Storage channel accessible hai.")
+        print("✅ Channel is accessible.")
         
-        # Agar channel mein koi anjaan member hai, toh use hatao
         try:
             await cleanup_channel(bot)
         except Exception as e:
-            print(f"Warning: Channel cleanup fail ho gaya, lekin bot chalta rahega. Error: {e}")
+            print(f"Warning: Initial channel cleanup failed, but continuing startup. Error: {e}")
 
-        # Multi-client setup (abhi ke liye sirf main bot)
         multi_clients[0] = bot
         work_loads[0] = 0
         
-        print("--- SERVER STARTUP: Lifespan safaltapoorvak poora hua. Bot background mein chal raha hai. ---")
-    
+        print("--- Lifespan startup complete. Bot is running in the background. ---")
     except Exception as e:
-        print(f"!!! FATAL ERROR: Bot startup ke dauraan error aa gaya: {traceback.format_exc()}")
+        print(f"!!! FATAL ERROR during bot startup in lifespan: {traceback.format_exc()}")
     
-    yield  # Ab web server requests lena shuru karega
+    yield
     
-    # Server band hone par yeh code chalega
-    print("--- SERVER SHUTDOWN: Lifespan event shuru ho raha hai ---")
+    print("--- Lifespan event: SHUTDOWN ---")
     if bot.is_initialized:
         await bot.stop()
-    print("--- SERVER SHUTDOWN: Lifespan poora hua. ---")
+    print("--- Lifespan shutdown complete ---")
 
 # FastAPI app ko lifespan ke saath initialize karo
 app = FastAPI(lifespan=lifespan)
@@ -88,25 +87,31 @@ def get_readable_file_size(size_in_bytes):
     """File size ko KB, MB, GB mein convert karta hai."""
     if not size_in_bytes:
         return '0B'
+    
     power = 1024
     n = 0
     power_labels = {0: 'B', 1: 'KB', 2: 'MB', 3: 'GB'}
+    
     while size_in_bytes >= power and n < len(power_labels) - 1:
         size_in_bytes /= power
         n += 1
+        
     return f"{size_in_bytes:.2f} {power_labels[n]}"
 
 def mask_filename(name: str):
     """File ka naam thoda chupa deta hai."""
     if not name:
         return "Protected File"
+    
     resolutions = ["2160p", "1080p", "720p", "480p", "360p"]
     res_part = ""
+    
     for res in resolutions:
         if res in name:
             res_part = f" {res}"
             name = name.replace(res, "")
             break
+            
     base, ext = os.path.splitext(name)
     masked_base = ''.join(c if (i % 3 == 0 and c.isalnum()) else '*' for i, c in enumerate(base))
     return f"{masked_base}{res_part}{ext}"
@@ -231,17 +236,21 @@ class ByteStreamer:
         current_part = 1
         try:
             while current_part <= part_count:
-                chunk = await media_session.invoke(
+                chunk_result = await media_session.invoke(
                     raw.functions.upload.GetFile(location=location, offset=offset, limit=chunk_size),
                     retries=0
                 )
-                if not isinstance(chunk, raw.types.upload.File):
+                if not isinstance(chunk_result, raw.types.upload.File):
                     break
                 
-                if part_count == 1: yield chunk.bytes[first_part_cut:last_part_cut]
-                elif current_part == 1: yield chunk.bytes[first_part_cut:]
-                elif current_part == part_count: yield chunk.bytes[:last_part_cut]
-                else: yield chunk.bytes
+                chunk = chunk_result.bytes
+                if not chunk:
+                    break
+
+                if part_count == 1: yield chunk[first_part_cut:last_part_cut]
+                elif current_part == 1: yield chunk[first_part_cut:]
+                elif current_part == part_count: yield chunk[:last_part_cut]
+                else: yield chunk
                 
                 current_part += 1
                 offset += chunk_size
@@ -251,11 +260,10 @@ class ByteStreamer:
 @app.get("/show/{unique_id}", response_class=HTMLResponse)
 async def show_page(request: Request, unique_id: str):
     """Download page dikhata hai."""
-    db_result = await db.get_link(unique_id)
-    if not db_result:
+    message_id = await db.get_link(unique_id)
+    if not message_id:
         raise HTTPException(status_code=404, detail="Link expired or invalid.")
     
-    message_id = db_result
     main_bot = multi_clients.get(0)
     if not main_bot:
         raise HTTPException(status_code=503, detail="Bot is not ready.")
@@ -347,5 +355,5 @@ async def stream_media(request: Request, message_id: int, file_name: str):
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
-    # Uvicorn server ko start karo. Woh automatically 'lifespan' function ko chala dega.
-    uvicorn.run("app:app", host="0.0.0.0", port=port)
+    # Uvicorn ko 'warning' level par chalao taaki faltu ke logs na aaye
+    uvicorn.run("app:app", host="0.0.0.0", port=port, log_level="warning")
