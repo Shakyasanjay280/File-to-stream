@@ -19,6 +19,7 @@ class Config:
     
     BASE_URL = os.environ.get("BASE_URL", "").rstrip('/')
     DATABASE_URL = os.environ.get("DATABASE_URL", "")
+    REDIRECT_BLOGGER_URL = os.environ.get("REDIRECT_BLOGGER_URL", "")
     BLOGGER_PAGE_URL = os.environ.get("BLOGGER_PAGE_URL", "")
     
     # --- YAHAN BADLAV KIYA GAYA HAI ---
