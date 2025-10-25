@@ -1,3 +1,8 @@
+# main.py (Final Version with Startup Print)
+
+# --- YEH LINE ADD KI GAYI HAI ---
+print("--- Script main.py execution started by Docker ---")
+
 import asyncio
 import os
 from traceback import format_exc
@@ -26,7 +31,6 @@ async def start_services():
         print(f"Bot [@{bot.me.username}] started successfully.")
 
         print(f"Verifying and caching STORAGE_CHANNEL: {Config.STORAGE_CHANNEL}")
-        # Yeh line ab seedha crash hogi agar ID galat hai
         await bot.get_chat(Config.STORAGE_CHANNEL)
         print("✅ STORAGE_CHANNEL is accessible.")
         
@@ -42,7 +46,6 @@ async def start_services():
         print(f"!!! FloodWait of {e.value} seconds received. Sleeping...")
         await asyncio.sleep(e.value + 5)
     except Exception as e:
-        # Ab saare errors (PeerIdInvalid sahit) yahan aayenge
         print(f"\n❌❌❌ An unexpected error occurred during startup: ❌❌❌")
         print(format_exc())
         print("\nTROUBLESHOOTING: This is most likely a CONFIGURATION ERROR. Check your BOT_TOKEN and STORAGE_CHANNEL ID very carefully.")
