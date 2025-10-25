@@ -6,7 +6,7 @@ import secrets
 import traceback
 import uvicorn
 from urllib.parse import urlparse
-
+from contextlib import asynccontextmanager # Import from contextlib, NOT asyncio
 import aiohttp
 import aiofiles
 from pyrogram import Client, filters, enums
