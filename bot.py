@@ -1,5 +1,7 @@
-# bot.py (NEW - Replicates the working project's structure)
+# bot.py (FINAL CLEAN VERSION)
 
+import os
+import asyncio
 from pyrogram import Client
 from config import Config
 
@@ -7,23 +9,21 @@ from config import Config
 multi_clients = {}
 work_loads = {}
 
-# Define the main bot client here
-# We add a 'workdir' just like the working project, which can help with session stability.
-# The name "SimpleStreamBot" will be used for the .session file.
+# Pyrogram ko batao ki saare handlers 'plugins' folder ke andar hain
+plugins = dict(root="plugins")
+
+# Bot client ko define karo
 bot = Client(
     name="SimpleStreamBot",
     api_id=Config.API_ID,
     api_hash=Config.API_HASH,
     bot_token=Config.BOT_TOKEN,
     workers=100,
-    workdir="sessions"  # Explicitly defining a workdir for session files
+    plugins=plugins,  # <-- Yahan plugins ko register karo
+    workdir="sessions"
 )
 
-
-# --- Multi-Client Initialization Logic (from your original code, it's good) ---
-import os
-import asyncio
-
+# --- Multi-Client Initialization Logic ---
 class TokenParser:
     @staticmethod
     def parse_from_env():
@@ -37,6 +37,7 @@ class TokenParser:
 async def start_client(client_id, bot_token):
     try:
         print(f"Attempting to start Client: {client_id}")
+        # Multi-clients ko plugins ki zaroorat nahi hai, isliye unhe no_updates=True ke saath start karo
         client = await Client(
             name=str(client_id), api_id=Config.API_ID, api_hash=Config.API_HASH,
             bot_token=bot_token, no_updates=True, in_memory=True
